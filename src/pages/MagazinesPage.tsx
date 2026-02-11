@@ -223,10 +223,28 @@ export default function MagazinesPage() {
                       <div className="flex items-center gap-3">
                         <h3 className="font-medium">{edition.medium_name}</h3>
                         {getStatusBadge(edition.status)}
+                        {edition.is_completed && (
+                          <span className="inline-flex items-center px-2 py-1 text-xs rounded-full bg-green-500 text-white font-semibold">
+                            ✓ Completada
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-600 mt-1">
                         Publicación: {formatDate(edition.publication_date)}
                       </p>
+                      {edition.is_completed && edition.publication_link && (
+                        <div className="mt-2">
+                          <a
+                            href={edition.publication_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            🔗 Ver publicación
+                          </a>
+                        </div>
+                      )}
                     </div>
                     {isAdmin(user) && (
                       <button

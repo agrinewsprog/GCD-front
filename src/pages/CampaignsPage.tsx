@@ -24,6 +24,7 @@ import { useAuthStore } from "@/stores/authStore";
 import {
   canEditCampaign,
   canDeleteCampaign,
+  canCreateCampaigns,
   isAdmin,
 } from "@/utils/permissions";
 
@@ -345,7 +346,9 @@ export const CampaignsPage = () => {
             Gestiona las campañas de marketing
           </p>
         </div>
-        <Button onClick={() => handleOpenModal()}>+ Nueva Campaña</Button>
+        {canCreateCampaigns(user) && (
+          <Button onClick={() => handleOpenModal()}>+ Nueva Campaña</Button>
+        )}
       </div>
 
       {error && (

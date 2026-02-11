@@ -45,4 +45,13 @@ export const campaignService = {
   ): Promise<void> => {
     await axios.patch(`/campaigns/actions/${actionId}`, { status, notes });
   },
+
+  moveActionToEdition: async (
+    actionId: number,
+    targetEditionId: number
+  ): Promise<void> => {
+    await axios.put(`/campaigns/actions/${actionId}/move`, { 
+      target_edition_id: targetEditionId 
+    });
+  },
 };

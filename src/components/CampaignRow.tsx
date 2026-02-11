@@ -4,7 +4,12 @@ import {
   magazineDeadlineService,
   DeadlineConfirmation,
 } from "@/services/magazineDeadlineService";
-import { EditionCampaign } from "@/services/magazineService";
+import {
+  EditionCampaign,
+  magazineService,
+  MagazineEdition,
+} from "@/services/magazineService";
+import { campaignService } from "@/services/campaignService";
 import { useAuthStore } from "@/stores/authStore";
 import { isAdmin } from "@/utils/permissions";
 
@@ -51,7 +56,7 @@ const DEADLINE_CONFIG = {
     },
     {
       type: "changes_post_sale",
-      label: "Cambios cliente - Post-venta",
+      label: "Link publicación Web",
       responsible: "post-venta",
       requiresLink: true,
       dateKey: "clientChangesDeadline",
@@ -89,6 +94,14 @@ export const CampaignRow = ({
     null,
   );
   const [linkInput, setLinkInput] = useState("");
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [availableEditions, setAvailableEditions] = useState<MagazineEdition[]>(
+    [],
+  );
+  const [selectedEditionId, setSelectedEditionId] = useState<number | null>(
+    null,
+  );
+  const [movingAction, setMovingAction] = useState(false);
 
   const config = DEADLINE_CONFIG[contentType];
 
@@ -155,12 +168,23 @@ export const CampaignRow = ({
   };
 
   const handleRevert = async (confirmationId: number) => {
-    if (!confirm("¿Estás seguro de revertir esta confirmación?")) return;
+    let confirmMessage = "¿Estás seguro de revertir esta confirmación?";
+
+    if (isEditionCompleted) {
+      confirmMessage =
+        "⚠️ ATENCIÓN: Al revertir esta confirmación, la revista volverá a estado NO PUBLICADA y se eliminará el link de publicación.\n\n¿Estás seguro de continuar?";
+    }
+
+    if (!confirm(confirmMessage)) return;
 
     try {
       await magazineDeadlineService.revertConfirmation(confirmationId);
       await loadConfirmations();
       onRefresh();
+
+      if (isEditionCompleted) {
+        alert("✓ Confirmación revertida. La revista ya NO está publicada.");
+      }
     } catch (error: any) {
       alert(error.response?.data?.error || "Error al revertir confirmación");
     }
@@ -180,9 +204,68 @@ export const CampaignRow = ({
     );
   };
 
-  const canConfirm = () => {
-    // For now, only admin can confirm
-    return isAdmin(user);
+  const canConfirm = (deadlineResponsible?: string) => {
+    // Admin can confirm everything
+    if (isAdmin(user)) return true;
+
+    // If no specific responsible provided, only admin can confirm
+    if (!deadlineResponsible) return false;
+
+    // Check if user has the required role for this deadline
+    if (deadlineResponsible === "comercial") {
+      return user?.roles?.includes("comercial");
+    }
+    if (deadlineResponsible === "post-venta") {
+      return user?.roles?.includes("post-venta");
+    }
+
+    return false;
+  };
+
+  const canMoveAction = () => {
+    // Only comercial and admin can move actions
+    return isAdmin(user) || user?.roles?.includes("comercial");
+  };
+
+  const handleOpenMoveModal = async () => {
+    try {
+      setMovingAction(true);
+      const editions = await magazineService.getAllEditions();
+      // Filter out completed editions
+      const availableEditions = editions.filter((e) => !e.is_completed);
+      setAvailableEditions(availableEditions);
+      setShowMoveModal(true);
+    } catch (error) {
+      console.error("Error loading editions:", error);
+      alert("Error al cargar las ediciones disponibles");
+    } finally {
+      setMovingAction(false);
+    }
+  };
+
+  const handleMoveAction = async () => {
+    if (!selectedEditionId) {
+      alert("Por favor selecciona una edición de destino");
+      return;
+    }
+
+    if (!confirm("¿Estás seguro de mover esta acción a otra edición?")) return;
+
+    try {
+      setMovingAction(true);
+      await campaignService.moveActionToEdition(
+        campaign.campaign_action_id,
+        selectedEditionId,
+      );
+      setShowMoveModal(false);
+      setSelectedEditionId(null);
+      onRefresh();
+      alert("Acción movida exitosamente");
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Error al mover la acción");
+    } finally {
+      setMovingAction(false);
+    }
   };
 
   const daysRemaining = (dateKey: string) => {
@@ -292,7 +375,7 @@ export const CampaignRow = ({
               <div className="text-xs text-gray-700 text-center font-medium">
                 {currentDeadline.label}
               </div>
-              {canConfirm() &&
+              {canConfirm(currentDeadline.responsible) &&
                 !isCurrentConfirmed &&
                 !isConfirming &&
                 !isEditionCompleted && (
@@ -431,7 +514,7 @@ export const CampaignRow = ({
                               </div>
                             )}
                           </div>
-                          {canConfirm() && (
+                          {isAdmin(user) && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -448,6 +531,99 @@ export const CampaignRow = ({
                   })}
                 </div>
               )}
+            </div>
+
+            {/* Botón para mover acción a otra edición */}
+            {canMoveAction() && !isEditionCompleted && (
+              <div className="mt-4 pt-4 border-t">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenMoveModal();
+                  }}
+                  disabled={movingAction}
+                  className="bg-orange-600 text-white px-3 py-2 rounded text-sm hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {movingAction ? "Cargando..." : "↻ Mover a otra edición"}
+                </button>
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+
+      {/* Modal para mover acción */}
+      {showMoveModal && (
+        <tr>
+          <td colSpan={contentType === "technical" ? 6 : 5}>
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+              onClick={() => setShowMoveModal(false)}
+            >
+              <div
+                className="bg-white rounded-lg p-6 max-w-md w-full mx-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-lg font-semibold mb-4">
+                  Mover acción a otra edición
+                </h3>
+
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-2">
+                    <strong>Empresa:</strong> {campaign.company_name}
+                  </p>
+                  <p className="text-sm text-gray-600 mb-2">
+                    <strong>Campaña:</strong> {campaign.campaign_name}
+                  </p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    <strong>Acción:</strong> {campaign.action_name}
+                  </p>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">
+                    Selecciona la edición de destino:
+                  </label>
+                  <select
+                    value={selectedEditionId || ""}
+                    onChange={(e) =>
+                      setSelectedEditionId(Number(e.target.value))
+                    }
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="">-- Selecciona una edición --</option>
+                    {availableEditions.map((edition) => (
+                      <option key={edition.id} value={edition.id}>
+                        {edition.medium_name} -{" "}
+                        {new Date(edition.publication_date).toLocaleDateString(
+                          "es-ES",
+                        )}{" "}
+                        ({edition.status})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => {
+                      setShowMoveModal(false);
+                      setSelectedEditionId(null);
+                    }}
+                    className="px-4 py-2 border rounded hover:bg-gray-100"
+                    disabled={movingAction}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleMoveAction}
+                    disabled={movingAction || !selectedEditionId}
+                    className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
+                  >
+                    {movingAction ? "Moviendo..." : "Mover"}
+                  </button>
+                </div>
+              </div>
             </div>
           </td>
         </tr>

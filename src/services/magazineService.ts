@@ -153,6 +153,12 @@ export const magazineService = {
     return response.data;
   },
 
+  // Alias for getAll
+  getAllEditions: async (): Promise<MagazineEdition[]> => {
+    const response = await axios.get("/magazines");
+    return response.data;
+  },
+
   // Get editions by medium
   getByMedium: async (mediumId: number): Promise<MagazineEdition[]> => {
     const response = await axios.get(`/magazines/medium/${mediumId}`);

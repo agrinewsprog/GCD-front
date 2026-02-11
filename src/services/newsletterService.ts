@@ -1,6 +1,6 @@
-import axios from 'axios';
+import axios from '@/lib/axios';
 
-const API_URL = 'http://localhost:3000/api/newsletters';
+const API_URL = '/newsletters';
 
 export interface NewsletterType {
   id: number;

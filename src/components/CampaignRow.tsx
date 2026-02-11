@@ -65,10 +65,18 @@ const DEADLINE_CONFIG = {
   ad: [
     {
       type: "client",
-      label: "Cliente",
+      label: "Cliente - Comercial",
       responsible: "comercial",
       requiresLink: false,
       dateKey: "clientDeadline",
+    },
+    {
+      type: "client_post_sale",
+      label: "Cliente - Post-venta",
+      responsible: "post-venta",
+      requiresLink: false,
+      dateKey: "clientDeadline",
+      dependsOn: "client", // Requires previous deadline to be confirmed
     },
   ],
 };
@@ -204,12 +212,23 @@ export const CampaignRow = ({
     );
   };
 
-  const canConfirm = (deadlineResponsible?: string) => {
+  const canConfirm = (deadlineResponsible?: string, deadlineType?: string) => {
     // Admin can confirm everything
     if (isAdmin(user)) return true;
 
     // If no specific responsible provided, only admin can confirm
     if (!deadlineResponsible) return false;
+
+    // Check dependencies - if this deadline depends on another, verify it's confirmed
+    if (deadlineType) {
+      const deadlineConfig = config.find((d) => d.type === deadlineType);
+      if (deadlineConfig && (deadlineConfig as any).dependsOn) {
+        const dependsOn = (deadlineConfig as any).dependsOn;
+        if (!isConfirmed(dependsOn)) {
+          return false; // Cannot confirm until dependency is confirmed
+        }
+      }
+    }
 
     // Check if user has the required role for this deadline
     if (deadlineResponsible === "comercial") {
@@ -375,7 +394,7 @@ export const CampaignRow = ({
               <div className="text-xs text-gray-700 text-center font-medium">
                 {currentDeadline.label}
               </div>
-              {canConfirm(currentDeadline.responsible) &&
+              {canConfirm(currentDeadline.responsible, currentDeadline.type) &&
                 !isCurrentConfirmed &&
                 !isConfirming &&
                 !isEditionCompleted && (

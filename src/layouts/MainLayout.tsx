@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
-import { canManageMasterData } from "@/utils/permissions";
+import { canManageMasterData, isAdmin } from "@/utils/permissions";
 
 export const MainLayout = () => {
   const user = useAuthStore((state) => state.user);
@@ -69,6 +69,12 @@ export const MainLayout = () => {
       label: "Revistas",
       icon: "📰",
       requiresPermission: null,
+    },
+    {
+      path: "/usuarios",
+      label: "Usuarios",
+      icon: "👤",
+      requiresPermission: isAdmin,
     },
   ];
 

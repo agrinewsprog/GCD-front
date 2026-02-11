@@ -11,6 +11,7 @@ import { CampaignDetailPage } from "@/pages/CampaignDetailPage";
 import NewsletterTypesPage from "@/pages/NewsletterTypesPage";
 import MagazinesPage from "@/pages/MagazinesPage";
 import MagazineEditionPage from "@/pages/MagazineEditionPage";
+import { UsersPage } from "@/pages/UsersPage";
 import { MainLayout } from "@/layouts/MainLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
@@ -39,6 +40,7 @@ function App() {
           <Route path="newsletters" element={<NewsletterTypesPage />} />
           <Route path="revistas" element={<MagazinesPage />} />
           <Route path="revistas/:id" element={<MagazineEditionPage />} />
+          <Route path="usuarios" element={<UsersPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

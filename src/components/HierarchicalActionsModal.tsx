@@ -19,6 +19,7 @@ interface HierarchicalActionsModalProps {
       medium_id: number;
       channel_id: number;
       action_id: number;
+      quantity?: number;
       start_date?: string;
       end_date?: string;
       newsletter_schedule_id?: number;
@@ -29,6 +30,7 @@ interface HierarchicalActionsModalProps {
     medium_id: number;
     channel_id: number;
     action_id: number;
+    quantity?: number;
     start_date?: string;
     end_date?: string;
     newsletter_schedule_id?: number;
@@ -83,11 +85,12 @@ export const HierarchicalActionsModal = ({
     mediumId: number;
     channelId: number;
     actionId: number;
+    index: number;
   } | null>(null);
 
-  // Store newsletter_schedule_id for each action: { "mediumId-channelId-actionId": scheduleId }
+  // Store newsletter_schedule_id for each action: { "mediumId-channelId-actionId": [scheduleId1, scheduleId2, ...] }
   const [actionNewsletterIds, setActionNewsletterIds] = useState<
-    Record<string, number>
+    Record<string, number[]>
   >({});
 
   // Magazine editions state
@@ -99,12 +102,28 @@ export const HierarchicalActionsModal = ({
     mediumId: number;
     channelId: number;
     actionId: number;
+    index: number;
   } | null>(null);
 
-  // Store magazine_edition_id for each action: { "mediumId-channelId-actionId": editionId }
+  // Store magazine_edition_id for each action: { "mediumId-channelId-actionId": [editionId1, editionId2, ...] }
   const [actionMagazineIds, setActionMagazineIds] = useState<
+    Record<string, number[]>
+  >({});
+
+  // Store quantity for each action: { "mediumId-channelId-actionId": quantity }
+  const [actionQuantities, setActionQuantities] = useState<
     Record<string, number>
   >({});
+
+  // Store individual dates for each newsletter instance: { "mediumId-channelId-actionId-index": date }
+  const [newsletterDates, setNewsletterDates] = useState<
+    Record<string, string>
+  >({});
+
+  // Store individual dates for each magazine instance: { "mediumId-channelId-actionId-index": date }
+  const [magazineDates, setMagazineDates] = useState<Record<string, string>>(
+    {},
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -116,47 +135,86 @@ export const HierarchicalActionsModal = ({
         const dates: Record<string, { start_date: string; end_date: string }> =
           {};
 
-        const newsletterIds: Record<string, number> = {};
-        const magazineIds: Record<string, number> = {};
+        const newsletterIds: Record<string, number[]> = {};
+        const magazineIds: Record<string, number[]> = {};
+        const quantities: Record<string, number> = {};
+        const nlDates: Record<string, string> = {};
+        const mgDates: Record<string, string> = {};
 
-        initialActions.forEach(
-          ({
-            medium_id,
-            channel_id,
-            action_id,
-            start_date,
-            end_date,
-            newsletter_schedule_id,
-            magazine_edition_id,
-          }) => {
-            if (!structure[medium_id]) structure[medium_id] = {};
-            if (!structure[medium_id][channel_id])
-              structure[medium_id][channel_id] = [];
+        // Group actions by medium_id, channel_id, action_id
+        const actionGroups: Record<string, typeof initialActions> = {};
+
+        initialActions.forEach((action) => {
+          const key = `${action.medium_id}-${action.channel_id}-${action.action_id}`;
+          if (!actionGroups[key]) {
+            actionGroups[key] = [];
+          }
+          actionGroups[key].push(action);
+        });
+
+        // Process each group
+        Object.entries(actionGroups).forEach(([key, actions]) => {
+          const firstAction = actions[0];
+          const { medium_id, channel_id, action_id } = firstAction;
+
+          // Add to structure
+          if (!structure[medium_id]) structure[medium_id] = {};
+          if (!structure[medium_id][channel_id])
+            structure[medium_id][channel_id] = [];
+          if (!structure[medium_id][channel_id].includes(action_id)) {
             structure[medium_id][channel_id].push(action_id);
+          }
 
-            // Store dates if they exist - convert to YYYY-MM-DD format
-            const key = `${medium_id}-${channel_id}-${action_id}`;
-            dates[key] = {
-              start_date: start_date ? start_date.split("T")[0] : "",
-              end_date: end_date ? end_date.split("T")[0] : "",
-            };
+          // Set quantity based on number of actions in group
+          quantities[key] = actions.length;
 
-            // Store newsletter_schedule_id if exists
-            if (newsletter_schedule_id) {
-              newsletterIds[key] = newsletter_schedule_id;
-            }
+          // For newsletter/magazine actions, store all IDs as array
+          const newsletterScheduleIds = actions
+            .map((a) => a.newsletter_schedule_id)
+            .filter((id): id is number => id !== undefined && id !== null);
 
-            // Store magazine_edition_id if exists
-            if (magazine_edition_id) {
-              magazineIds[key] = magazine_edition_id;
-            }
-          },
-        );
+          const magazineEditionIds = actions
+            .map((a) => a.magazine_edition_id)
+            .filter((id): id is number => id !== undefined && id !== null);
+
+          if (newsletterScheduleIds.length > 0) {
+            newsletterIds[key] = newsletterScheduleIds;
+            // Store individual dates for each newsletter
+            actions.forEach((action, index) => {
+              if (action.newsletter_schedule_id && action.start_date) {
+                nlDates[`${key}-${index}`] = action.start_date.split("T")[0];
+              }
+            });
+          }
+
+          if (magazineEditionIds.length > 0) {
+            magazineIds[key] = magazineEditionIds;
+            // Store individual dates for each magazine
+            actions.forEach((action, index) => {
+              if (action.magazine_edition_id && action.start_date) {
+                mgDates[`${key}-${index}`] = action.start_date.split("T")[0];
+              }
+            });
+          }
+
+          // For regular actions, use first action's dates
+          dates[key] = {
+            start_date: firstAction.start_date
+              ? firstAction.start_date.split("T")[0]
+              : "",
+            end_date: firstAction.end_date
+              ? firstAction.end_date.split("T")[0]
+              : "",
+          };
+        });
 
         setSelectedActions(structure);
         setActionDates(dates);
         setActionNewsletterIds(newsletterIds);
         setActionMagazineIds(magazineIds);
+        setActionQuantities(quantities);
+        setNewsletterDates(nlDates);
+        setMagazineDates(mgDates);
 
         // Expand all mediums and channels with data
         const mediumIds = Object.keys(structure).map(Number);
@@ -175,6 +233,9 @@ export const HierarchicalActionsModal = ({
         setActionDates({});
         setActionNewsletterIds({});
         setActionMagazineIds({});
+        setActionQuantities({});
+        setNewsletterDates({});
+        setMagazineDates({});
         setExpandedMediums(new Set());
         setExpandedChannels(new Set());
       }
@@ -254,13 +315,42 @@ export const HierarchicalActionsModal = ({
       const newNewsletterIds = { ...actionNewsletterIds };
       delete newNewsletterIds[key];
       setActionNewsletterIds(newNewsletterIds);
+
+      const newMagazineIds = { ...actionMagazineIds };
+      delete newMagazineIds[key];
+      setActionMagazineIds(newMagazineIds);
+
+      const newQuantities = { ...actionQuantities };
+      delete newQuantities[key];
+      setActionQuantities(newQuantities);
+
+      // Clean up individual newsletter/magazine dates
+      setNewsletterDates((prev) => {
+        const newNlDates = { ...prev };
+        for (let i = 0; i < 100; i++) {
+          delete newNlDates[`${key}-${i}`];
+        }
+        return newNlDates;
+      });
+
+      setMagazineDates((prev) => {
+        const newMgDates = { ...prev };
+        for (let i = 0; i < 100; i++) {
+          delete newMgDates[`${key}-${i}`];
+        }
+        return newMgDates;
+      });
     } else {
       actions.push(actionId);
-      // Initialize dates when checking
+      // Initialize dates and quantity when checking
       const key = `${mediumId}-${channelId}-${actionId}`;
       setActionDates((prev) => ({
         ...prev,
         [key]: { start_date: "", end_date: "" },
+      }));
+      setActionQuantities((prev) => ({
+        ...prev,
+        [key]: 1, // Default quantity is 1
       }));
     }
 
@@ -326,8 +416,9 @@ export const HierarchicalActionsModal = ({
     mediumId: number,
     channelId: number,
     actionId: number,
+    index: number,
   ) => {
-    setCurrentNewsletterAction({ mediumId, channelId, actionId });
+    setCurrentNewsletterAction({ mediumId, channelId, actionId, index });
     setNewsletterModalOpen(true);
   };
 
@@ -338,16 +429,22 @@ export const HierarchicalActionsModal = ({
   ) => {
     if (!currentNewsletterAction) return;
 
-    const { mediumId, channelId, actionId } = currentNewsletterAction;
+    const { mediumId, channelId, actionId, index } = currentNewsletterAction;
     const key = `${mediumId}-${channelId}-${actionId}`;
+    const dateKey = `${key}-${index}`;
 
-    // Store the schedule ID
-    setActionNewsletterIds((prev) => ({ ...prev, [key]: scheduleId }));
+    // Store the schedule ID in the array at the specified index
+    setActionNewsletterIds((prev) => {
+      const currentIds = prev[key] || [];
+      const newIds = [...currentIds];
+      newIds[index] = scheduleId;
+      return { ...prev, [key]: newIds };
+    });
 
-    // Store the date in both start_date and end_date (newsletters are single-day)
-    setActionDates((prev) => ({
+    // Store the date for this specific index
+    setNewsletterDates((prev) => ({
       ...prev,
-      [key]: { start_date: date, end_date: date },
+      [dateKey]: date,
     }));
 
     setNewsletterModalOpen(false);
@@ -358,8 +455,9 @@ export const HierarchicalActionsModal = ({
     mediumId: number,
     channelId: number,
     actionId: number,
+    index: number,
   ) => {
-    setCurrentMagazineAction({ mediumId, channelId, actionId });
+    setCurrentMagazineAction({ mediumId, channelId, actionId, index });
     setMagazineModalOpen(true);
   };
 
@@ -369,16 +467,22 @@ export const HierarchicalActionsModal = ({
   ) => {
     if (!currentMagazineAction) return;
 
-    const { mediumId, channelId, actionId } = currentMagazineAction;
+    const { mediumId, channelId, actionId, index } = currentMagazineAction;
     const key = `${mediumId}-${channelId}-${actionId}`;
+    const dateKey = `${key}-${index}`;
 
-    // Store the edition ID
-    setActionMagazineIds((prev) => ({ ...prev, [key]: editionId }));
+    // Store the edition ID in the array at the specified index
+    setActionMagazineIds((prev) => {
+      const currentIds = prev[key] || [];
+      const newIds = [...currentIds];
+      newIds[index] = editionId;
+      return { ...prev, [key]: newIds };
+    });
 
-    // Store the publication date in both start_date and end_date
-    setActionDates((prev) => ({
+    // Store the publication date for this specific index
+    setMagazineDates((prev) => ({
       ...prev,
-      [key]: { start_date: publicationDate, end_date: publicationDate },
+      [dateKey]: publicationDate,
     }));
 
     setMagazineModalOpen(false);
@@ -404,11 +508,63 @@ export const HierarchicalActionsModal = ({
     }));
   };
 
+  const updateActionQuantity = (
+    mediumId: number,
+    channelId: number,
+    actionId: number,
+    quantity: number,
+  ) => {
+    const key = `${mediumId}-${channelId}-${actionId}`;
+    // Ensure quantity is at least 1
+    const validQuantity = Math.max(1, quantity);
+    setActionQuantities((prev) => ({
+      ...prev,
+      [key]: validQuantity,
+    }));
+
+    // If quantity decreased, truncate the newsletter/magazine ID arrays
+    setActionNewsletterIds((prev) => {
+      const currentIds = prev[key] || [];
+      if (currentIds.length > validQuantity) {
+        return { ...prev, [key]: currentIds.slice(0, validQuantity) };
+      }
+      return prev;
+    });
+
+    setActionMagazineIds((prev) => {
+      const currentIds = prev[key] || [];
+      if (currentIds.length > validQuantity) {
+        return { ...prev, [key]: currentIds.slice(0, validQuantity) };
+      }
+      return prev;
+    });
+
+    // Clean up dates for removed indexes
+    setNewsletterDates((prev) => {
+      const newDates = { ...prev };
+      for (let i = validQuantity; i < 100; i++) {
+        // Clean up to 100 indexes
+        delete newDates[`${key}-${i}`];
+      }
+      return newDates;
+    });
+
+    setMagazineDates((prev) => {
+      const newDates = { ...prev };
+      for (let i = validQuantity; i < 100; i++) {
+        // Clean up to 100 indexes
+        delete newDates[`${key}-${i}`];
+      }
+      return newDates;
+    });
+  };
+
   const handleSave = () => {
     const actions: Array<{
       medium_id: number;
       channel_id: number;
       action_id: number;
+      quantity?: number;
       start_date?: string;
       end_date?: string;
       newsletter_schedule_id?: number;
@@ -420,8 +576,9 @@ export const HierarchicalActionsModal = ({
         actionIds.forEach((actionId) => {
           const key = `${mediumId}-${channelId}-${actionId}`;
           const dates = actionDates[key] || { start_date: "", end_date: "" };
-          const newsletterScheduleId = actionNewsletterIds[key];
-          const magazineEditionId = actionMagazineIds[key];
+          const newsletterScheduleIds = actionNewsletterIds[key] || [];
+          const magazineEditionIds = actionMagazineIds[key] || [];
+          const quantity = actionQuantities[key] || 1;
 
           // Ensure dates are in YYYY-MM-DD format (no time component)
           const startDate = dates.start_date
@@ -431,15 +588,54 @@ export const HierarchicalActionsModal = ({
             ? dates.end_date.split("T")[0]
             : undefined;
 
-          actions.push({
-            medium_id: Number(mediumId),
-            channel_id: Number(channelId),
-            action_id: actionId,
-            start_date: startDate,
-            end_date: endDate,
-            newsletter_schedule_id: newsletterScheduleId,
-            magazine_edition_id: magazineEditionId,
-          });
+          // For newsletter/magazine actions with multiple IDs, create separate records
+          if (newsletterScheduleIds.length > 0) {
+            // Create one record for each newsletter schedule
+            newsletterScheduleIds.forEach((scheduleId, index) => {
+              if (scheduleId) {
+                // Skip undefined/null values
+                const dateKey = `${key}-${index}`;
+                const nlDate = newsletterDates[dateKey];
+                actions.push({
+                  medium_id: Number(mediumId),
+                  channel_id: Number(channelId),
+                  action_id: actionId,
+                  quantity: 1, // Each is a single instance
+                  start_date: nlDate,
+                  end_date: nlDate,
+                  newsletter_schedule_id: scheduleId,
+                });
+              }
+            });
+          } else if (magazineEditionIds.length > 0) {
+            // Create one record for each magazine edition
+            magazineEditionIds.forEach((editionId, index) => {
+              if (editionId) {
+                // Skip undefined/null values
+                const dateKey = `${key}-${index}`;
+                const mgDate = magazineDates[dateKey];
+                actions.push({
+                  medium_id: Number(mediumId),
+                  channel_id: Number(channelId),
+                  action_id: actionId,
+                  quantity: 1, // Each is a single instance
+                  start_date: mgDate,
+                  end_date: mgDate,
+                  magazine_edition_id: editionId,
+                });
+              }
+            });
+          } else {
+            // Regular action: use quantity as specified
+            actions.push({
+              medium_id: Number(mediumId),
+              channel_id: Number(channelId),
+              action_id: actionId,
+              quantity: quantity,
+              start_date: startDate,
+              end_date: endDate,
+            });
+          }
         });
       });
     });
@@ -612,54 +808,138 @@ export const HierarchicalActionsModal = ({
                                               <span className="text-sm font-medium text-gray-700">
                                                 ⚡ {action.name}
                                               </span>
+                                              {isSelected && (
+                                                <div className="flex items-center gap-2 ml-auto">
+                                                  <label className="text-xs font-medium text-gray-600">
+                                                    Cantidad:
+                                                  </label>
+                                                  <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={
+                                                      actionQuantities[key] || 1
+                                                    }
+                                                    onChange={(e) =>
+                                                      updateActionQuantity(
+                                                        medium.id,
+                                                        channel.id,
+                                                        action.id,
+                                                        parseInt(
+                                                          e.target.value,
+                                                        ) || 1,
+                                                      )
+                                                    }
+                                                    className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    onClick={(e) =>
+                                                      e.stopPropagation()
+                                                    }
+                                                  />
+                                                </div>
+                                              )}
                                             </div>
                                             {isSelected && (
                                               <div>
                                                 {isNewsletterChannel(
                                                   channel.id,
                                                 ) ? (
-                                                  // Newsletter action: show special button
-                                                  <div>
-                                                    <Button
-                                                      type="button"
-                                                      onClick={() =>
-                                                        openNewsletterModal(
-                                                          medium.id,
-                                                          channel.id,
-                                                          action.id,
-                                                        )
-                                                      }
-                                                      variant="secondary"
-                                                      className="w-full"
-                                                    >
-                                                      📧{" "}
-                                                      {dates.start_date
-                                                        ? `Fecha: ${dates.start_date}`
-                                                        : "Seleccionar Newsletter"}
-                                                    </Button>
+                                                  // Newsletter action: show multiple buttons based on quantity
+                                                  <div className="space-y-2">
+                                                    {Array.from({
+                                                      length:
+                                                        actionQuantities[key] ||
+                                                        1,
+                                                    }).map((_, index) => {
+                                                      const newsletterIds =
+                                                        actionNewsletterIds[
+                                                          key
+                                                        ] || [];
+                                                      const hasSelection =
+                                                        newsletterIds[index] !==
+                                                        undefined;
+                                                      const dateKey = `${key}-${index}`;
+                                                      const nlDate =
+                                                        newsletterDates[
+                                                          dateKey
+                                                        ];
+                                                      return (
+                                                        <Button
+                                                          key={index}
+                                                          type="button"
+                                                          onClick={() =>
+                                                            openNewsletterModal(
+                                                              medium.id,
+                                                              channel.id,
+                                                              action.id,
+                                                              index,
+                                                            )
+                                                          }
+                                                          variant="secondary"
+                                                          className="w-full"
+                                                        >
+                                                          📧{" "}
+                                                          {actionQuantities[
+                                                            key
+                                                          ] > 1 &&
+                                                            `#${index + 1} - `}
+                                                          {hasSelection &&
+                                                          nlDate
+                                                            ? `${nlDate} ✓`
+                                                            : hasSelection
+                                                              ? "Newsletter seleccionada ✓"
+                                                              : "Seleccionar Newsletter"}
+                                                        </Button>
+                                                      );
+                                                    })}
                                                   </div>
                                                 ) : isMagazineChannel(
                                                     channel.id,
                                                   ) ? (
-                                                  // Magazine action: show special button
-                                                  <div>
-                                                    <Button
-                                                      type="button"
-                                                      onClick={() =>
-                                                        openMagazineModal(
-                                                          medium.id,
-                                                          channel.id,
-                                                          action.id,
-                                                        )
-                                                      }
-                                                      variant="secondary"
-                                                      className="w-full"
-                                                    >
-                                                      📰{" "}
-                                                      {dates.start_date
-                                                        ? `Fecha: ${dates.start_date}`
-                                                        : "Seleccionar Edición"}
-                                                    </Button>
+                                                  // Magazine action: show multiple buttons based on quantity
+                                                  <div className="space-y-2">
+                                                    {Array.from({
+                                                      length:
+                                                        actionQuantities[key] ||
+                                                        1,
+                                                    }).map((_, index) => {
+                                                      const magazineIds =
+                                                        actionMagazineIds[
+                                                          key
+                                                        ] || [];
+                                                      const hasSelection =
+                                                        magazineIds[index] !==
+                                                        undefined;
+                                                      const dateKey = `${key}-${index}`;
+                                                      const mgDate =
+                                                        magazineDates[dateKey];
+                                                      return (
+                                                        <Button
+                                                          key={index}
+                                                          type="button"
+                                                          onClick={() =>
+                                                            openMagazineModal(
+                                                              medium.id,
+                                                              channel.id,
+                                                              action.id,
+                                                              index,
+                                                            )
+                                                          }
+                                                          variant="secondary"
+                                                          className="w-full"
+                                                        >
+                                                          📰{" "}
+                                                          {actionQuantities[
+                                                            key
+                                                          ] > 1 &&
+                                                            `#${index + 1} - `}
+                                                          {hasSelection &&
+                                                          mgDate
+                                                            ? `${mgDate} ✓`
+                                                            : hasSelection
+                                                              ? "Edición seleccionada ✓"
+                                                              : "Seleccionar Edición"}
+                                                        </Button>
+                                                      );
+                                                    })}
                                                   </div>
                                                 ) : (
                                                   // Regular action: show date pickers

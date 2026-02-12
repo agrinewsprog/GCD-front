@@ -126,6 +126,7 @@ export interface CampaignAction {
   channel_name?: string;
   action_id: number;
   action_name?: string;
+  quantity: number;
   start_date?: string;
   end_date?: string;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';

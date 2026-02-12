@@ -518,8 +518,15 @@ export const CampaignDetailPage = () => {
                                     📺 {action.channel_name}
                                   </span>
                                 </div>
-                                <div className="font-medium text-sm text-gray-900">
-                                  ⚡ {action.action_name}
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm text-gray-900">
+                                    ⚡ {action.action_name}
+                                  </span>
+                                  {action.quantity && action.quantity > 1 && (
+                                    <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded">
+                                      ×{action.quantity}
+                                    </span>
+                                  )}
                                 </div>
                                 {(action.start_date || action.end_date) && (
                                   <div className="text-xs text-gray-600 mt-1">
